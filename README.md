@@ -1,0 +1,1 @@
+# qweather-mcp-go
