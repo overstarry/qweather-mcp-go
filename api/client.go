@@ -15,6 +15,7 @@ type Client struct {
 	BaseURL    string
 	APIKey     string
 	HTTPClient *http.Client
+	LogLevel   LogLevel
 }
 
 // NewClient Create a new API client
@@ -23,7 +24,13 @@ func NewClient(baseURL, apiKey string) *Client {
 		BaseURL:    baseURL,
 		APIKey:     apiKey,
 		HTTPClient: &http.Client{Timeout: 10 * time.Second},
+		LogLevel:   LogLevelError, // Default to error logging only
 	}
+}
+
+// SetLogLevel sets the logging level
+func (c *Client) SetLogLevel(level LogLevel) {
+	c.LogLevel = level
 }
 
 // MakeRequest Send API request
@@ -81,12 +88,18 @@ func (c *Client) MakeRequest(endpoint string, params map[string]string, pathPara
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	// Log response details for debugging (limit to avoid excessive logging)
-	bodyPreview := string(body)
-	if len(bodyPreview) > 1000 {
-		bodyPreview = bodyPreview[:1000] + "... (truncated)"
+	// Output response information based on log level
+	if c.LogLevel >= LogLevelDebug {
+		// Output full response at debug level
+		bodyPreview := string(body)
+		if len(bodyPreview) > 1000 {
+			bodyPreview = bodyPreview[:1000] + "... (truncated)"
+		}
+		fmt.Printf("API Response [%s]: Status=%d, Body=%s\n", endpoint, resp.StatusCode, bodyPreview)
+	} else if c.LogLevel >= LogLevelInfo {
+		// Output only status code and endpoint at info level
+		fmt.Printf("API Response [%s]: Status=%d\n", endpoint, resp.StatusCode)
 	}
-	fmt.Printf("API Response [%s]: Status=%d, Body=%s\n", endpoint, resp.StatusCode, bodyPreview)
 
 	return body, nil
 }
@@ -234,18 +247,20 @@ func (c *Client) GetAirQuality(lat, lon string) (*AirQualityResponse, error) {
 		return nil, err
 	}
 
-	// Log raw response for debugging
-	rawData := string(data)
-	fmt.Printf("Raw API Response for GetAirQuality: %s\n", rawData)
-
 	var response AirQualityResponse
 	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse air quality data: %w, raw data: %s", err, rawData[:min(len(rawData), 500)])
+		if c.LogLevel >= LogLevelError {
+			rawData := string(data)
+			fmt.Printf("Error parsing air quality data: %v, raw data: %s\n", err, rawData[:min(len(rawData), 500)])
+		}
+		return nil, fmt.Errorf("failed to parse air quality data: %w", err)
 	}
 
 	// Check if Code field is empty and log warning
 	if response.Code == "" {
-		fmt.Printf("WARNING: Empty Code field in AirQualityResponse. Raw response: %s\n", rawData[:min(len(rawData), 500)])
+		if c.LogLevel >= LogLevelInfo {
+			fmt.Printf("WARNING: Empty Code field in AirQualityResponse\n")
+		}
 		// Set a default error code for empty codes to prevent confusion in error messages
 		response.Code = "unknown"
 	}
@@ -262,18 +277,20 @@ func (c *Client) GetAirQualityHourly(lat, lon string) (*AirQualityHourlyResponse
 		return nil, err
 	}
 
-	// Log raw response for debugging
-	rawData := string(data)
-	fmt.Printf("Raw API Response for GetAirQualityHourly: %s\n", rawData)
-
 	var response AirQualityHourlyResponse
 	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse hourly air quality data: %w, raw data: %s", err, rawData[:min(len(rawData), 500)])
+		if c.LogLevel >= LogLevelError {
+			rawData := string(data)
+			fmt.Printf("Error parsing hourly air quality data: %v, raw data: %s\n", err, rawData[:min(len(rawData), 500)])
+		}
+		return nil, fmt.Errorf("failed to parse hourly air quality data: %w", err)
 	}
 
 	// Check if Code field is empty and log warning
 	if response.Code == "" {
-		fmt.Printf("WARNING: Empty Code field in AirQualityHourlyResponse. Raw response: %s\n", rawData[:min(len(rawData), 500)])
+		if c.LogLevel >= LogLevelInfo {
+			fmt.Printf("WARNING: Empty Code field in AirQualityHourlyResponse\n")
+		}
 		// Set a default error code for empty codes to prevent confusion in error messages
 		response.Code = "unknown"
 	}
@@ -298,18 +315,20 @@ func (c *Client) GetAirQualityDaily(lat, lon string) (*AirQualityDailyResponse, 
 		return nil, err
 	}
 
-	// Log raw response for debugging
-	rawData := string(data)
-	fmt.Printf("Raw API Response for GetAirQualityDaily: %s\n", rawData)
-
 	var response AirQualityDailyResponse
 	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse daily air quality data: %w, raw data: %s", err, rawData[:min(len(rawData), 500)])
+		if c.LogLevel >= LogLevelError {
+			rawData := string(data)
+			fmt.Printf("Error parsing daily air quality data: %v, raw data: %s\n", err, rawData[:min(len(rawData), 500)])
+		}
+		return nil, fmt.Errorf("failed to parse daily air quality data: %w", err)
 	}
 
 	// Check if Code field is empty and log warning
 	if response.Code == "" {
-		fmt.Printf("WARNING: Empty Code field in AirQualityDailyResponse. Raw response: %s\n", rawData[:min(len(rawData), 500)])
+		if c.LogLevel >= LogLevelInfo {
+			fmt.Printf("WARNING: Empty Code field in AirQualityDailyResponse\n")
+		}
 		// Set a default error code for empty codes to prevent confusion in error messages
 		response.Code = "unknown"
 	}
