@@ -1,4 +1,5 @@
 # qweather-mcp-go
+[![smithery badge](https://smithery.ai/badge/@overstarry/qweather-mcp-go-hot)](https://smithery.ai/server/@overstarry/qweather-mcp-go-hot)
 
 MCP (Model Context Protocol) tool implementation for QWeather API.
 
