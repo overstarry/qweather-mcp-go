@@ -1,5 +1,7 @@
 # qweather-mcp-go
 
+[![smithery badge](https://smithery.ai/badge/@overstarry/qweather-mcp-go)](https://smithery.ai/server/@overstarry/qweather-mcp-go)
+
 MCP (Model Context Protocol) tool implementation for QWeather API.
 
 ## Features
@@ -65,3 +67,11 @@ By default, the server address is: `http://localhost:8080`
 ### stdio Mode
 
 When running in stdio mode, the server will communicate with clients through standard input and output. This mode is suitable for integration with AI assistants (such as Claude) that support the MCP protocol.
+
+### Installing via Smithery
+
+To install qweather-mcp-go for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@overstarry/qweather-mcp-go):
+
+```bash
+npx -y @smithery/cli install @overstarry/qweather-mcp-go --client claude
+```
