@@ -1,6 +1,6 @@
 .history/
 *.exe
 
-# 环境变量配置文件
+# Environment variables configuration file
 .env
 .idea/

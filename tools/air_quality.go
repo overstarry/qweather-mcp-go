@@ -62,7 +62,7 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
-		// 即使Code为"unknown"，我们也需要确认indexes数组不为空
+		// Even if Code is "unknown", we need to confirm that the indexes array is not empty
 		if airQualityData.Code == "unknown" && len(airQualityData.Indexes) > 0 {
 			fmt.Printf("API returned status code 'unknown', but indexes array is not empty. Data is valid, continuing to process request\n")
 			fmt.Printf("Data structure analysis: API response contains %d air quality indexes\n", len(airQualityData.Indexes))
@@ -181,7 +181,7 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
-		// 即使Code为"unknown"，我们也需要确认hours数组不为空
+		// Even if Code is "unknown", we need to confirm that the hours array is not empty
 		if airQualityData.Code == "unknown" && len(airQualityData.Hours) > 0 {
 			fmt.Printf("API returned status code 'unknown', but hours array is not empty. Data is valid, continuing to process request\n")
 			fmt.Printf("Data structure analysis: API response contains %d hours of forecast data\n", len(airQualityData.Hours))
@@ -302,14 +302,14 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
-		// 处理API返回的Code字段，如果是"unknown"（由GetAirQualityDaily设置的默认值）且days数组不为空，则认为是成功的响应
+		// Handle the Code field returned by the API. If it's "unknown" (default value set by GetAirQualityDaily) and the days array is not empty, consider it a successful response
 		if airQualityData.Code != "200" && airQualityData.Code != "unknown" {
 			errorMsg := fmt.Sprintf("Failed to get daily air quality forecast data: API returned error code %s (Coordinates: lat=%s, lon=%s)",
 				airQualityData.Code, lat, lon)
 			return mcp.NewToolResultError(errorMsg), nil
 		}
 
-		// 即使Code为"unknown"，我们也需要确认days数组不为空
+		// Even if Code is "unknown", we need to confirm that the days array is not empty
 		if airQualityData.Code == "unknown" && len(airQualityData.Days) > 0 {
 			fmt.Printf("API returned status code 'unknown', but days array is not empty. Data is valid, continuing to process request\n")
 			fmt.Printf("Data structure analysis: API response contains %d days of forecast data\n", len(airQualityData.Days))
