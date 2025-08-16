@@ -11,7 +11,10 @@ qweather-mcp-go is an MCP (Model Context Protocol) server implementation that pr
 ### Building and Running
 - `go run main.go` - Run in SSE mode (default, port 8080)
 - `go run main.go -t stdio` - Run in stdio mode for MCP integration
-- `go run main.go -p 3000` - Run in SSE mode on port 3000
+- `go run main.go -t sse` - Run in SSE mode (default)
+- `go run main.go -t streamable` - Run in Streamable HTTP mode
+- `go run main.go -p 3000` - Run on port 3000 (for sse and streamable modes)
+- `go run main.go -t streamable -p 8080` - Run Streamable HTTP on port 8080
 - `go build -o qweather-mcp-go main.go` - Build binary
 
 ### Environment Setup
@@ -63,6 +66,7 @@ qweather-mcp-go is an MCP (Model Context Protocol) server implementation that pr
 ### Transport Modes
 - **stdio mode**: For MCP integration with AI assistants
 - **SSE mode**: HTTP server with Server-Sent Events (default)
+- **streamable HTTP mode**: HTTP server with streamable responses for web applications and REST-like APIs
 
 ### Tool Categories
 1. **Weather Tools**: Real-time conditions, daily/hourly forecasts, minutely precipitation, weather warnings
@@ -76,12 +80,18 @@ qweather-mcp-go is an MCP (Model Context Protocol) server implementation that pr
 
 ### Configuration
 - Environment variables for API credentials
-- Command-line flags for transport mode and port  
+- Command-line flags for transport mode (`stdio`, `sse`, `streamable`) and port  
 - Smithery integration for easy deployment via `npx -y @smithery/cli install @overstarry/qweather-mcp-go --client claude`
 
+### Transport Endpoints
+- **Stdio**: Standard input/output communication
+- **SSE**: `http://localhost:PORT/sse` - Server-Sent Events endpoint
+- **Streamable HTTP**: `http://localhost:PORT` - Streamable HTTP endpoint with native MCP over HTTP support
+  - Uses the official `NewStreamableHTTPServer` implementation from mcp-go v0.37.0
+
 ### Key Implementation Details
-- MCP server uses `github.com/mark3labs/mcp-go v0.27.1` framework
+- MCP server uses `github.com/mark3labs/mcp-go v0.37.0` framework
 - API client includes configurable timeout (10s default) and logging levels
 - All tools validate input parameters and return structured MCP responses
 - City lookups use QWeather's geocoding API before querying weather data
-- Transport modes: stdio (for MCP clients) and SSE (HTTP server for testing)
+- Transport modes: stdio (for MCP clients), SSE (HTTP server for real-time updates), and streamable HTTP (REST-like API server)
