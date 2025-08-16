@@ -43,6 +43,6 @@ if "%QWEATHER_API_KEY%"=="" (
 
 REM Run the program
 echo Starting QWeather MCP server...
-go run main.go
+go run main.go 
 
 endlocal

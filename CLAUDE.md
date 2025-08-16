@@ -18,10 +18,21 @@ qweather-mcp-go is an MCP (Model Context Protocol) server implementation that pr
 - Copy `.env.example` to `.env` and set:
   - `QWEATHER_API_BASE=https://api.qweather.com`
   - `QWEATHER_API_KEY=your_api_key_here`
+- Or set environment variables directly:
+  ```bash
+  export QWEATHER_API_BASE=https://api.qweather.com
+  export QWEATHER_API_KEY=your_api_key_here
+  ```
 
 ### Testing
 - `go test ./...` - Run all tests
 - `go test ./utils -v` - Run utils tests with verbose output
+- `go test -race ./...` - Run tests with race detection
+
+### Code Quality
+- `go fmt ./...` - Format all Go files
+- `go vet ./...` - Run Go vet for static analysis
+- `go mod tidy` - Clean up module dependencies
 
 ### Platform-specific Scripts
 - Linux/Mac: `./run.sh` (loads .env automatically)
@@ -65,5 +76,12 @@ qweather-mcp-go is an MCP (Model Context Protocol) server implementation that pr
 
 ### Configuration
 - Environment variables for API credentials
-- Command-line flags for transport mode and port
-- Smithery integration for easy deployment
+- Command-line flags for transport mode and port  
+- Smithery integration for easy deployment via `npx -y @smithery/cli install @overstarry/qweather-mcp-go --client claude`
+
+### Key Implementation Details
+- MCP server uses `github.com/mark3labs/mcp-go v0.27.1` framework
+- API client includes configurable timeout (10s default) and logging levels
+- All tools validate input parameters and return structured MCP responses
+- City lookups use QWeather's geocoding API before querying weather data
+- Transport modes: stdio (for MCP clients) and SSE (HTTP server for testing)
