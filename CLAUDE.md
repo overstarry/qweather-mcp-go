@@ -80,7 +80,7 @@ qweather-mcp-go is an MCP (Model Context Protocol) server implementation that pr
 
 ### Configuration
 - Environment variables for API credentials
-- Command-line flags for transport mode (`stdio`, `sse`, `streamable`) and port  
+- Command-line flags for transport mode (`stdio`, `sse`, `streamable`) and port
 - Smithery integration for easy deployment via `npx -y @smithery/cli install @overstarry/qweather-mcp-go --client claude`
 
 ### Transport Endpoints
