@@ -15,11 +15,16 @@ func main() {
 	// Command line arguments
 	var transport string
 	var port string
-	flag.StringVar(&transport, "t", "sse", "Transport type (stdio or sse)")
-	flag.StringVar(&transport, "transport", "sse", "Transport type (stdio or sse)")
-	flag.StringVar(&port, "p", "8080", "SSE server listening port")
-	flag.StringVar(&port, "port", "8080", "SSE server listening port")
+	flag.StringVar(&transport, "t", "sse", "Transport type (stdio, sse, or streamable)")
+	flag.StringVar(&transport, "transport", "sse", "Transport type (stdio, sse, or streamable)")
+	flag.StringVar(&port, "p", "8080", "Server listening port (for sse and streamable transports)")
+	flag.StringVar(&port, "port", "8080", "Server listening port (for sse and streamable transports)")
 	flag.Parse()
+
+	// Validate transport type
+	if transport != "stdio" && transport != "sse" && transport != "streamable" {
+		log.Fatalf("Invalid transport type: %s. Must be one of: stdio, sse, streamable", transport)
+	}
 
 	// Get configuration from environment variables
 	baseURL := os.Getenv("QWEATHER_API_BASE")
@@ -46,19 +51,36 @@ func main() {
 	tools.RegisterIndicesTools(s, client)
 
 	// Start server based on transport type
-	if transport == "stdio" {
-		fmt.Println("QWeather MCP server running on stdio")
+	addr := ":" + port
+
+	switch transport {
+	case "stdio":
+		fmt.Println("QWeather MCP server running on stdio transport")
 		if err := server.ServeStdio(s); err != nil {
-			log.Fatalf("Server error: %v", err)
+			log.Fatalf("Stdio server error: %v", err)
 		}
-	} else {
-		// Default to SSE
-		addr := ":" + port
+
+	case "sse":
 		baseURL := "http://localhost:" + port
 		sseServer := server.NewSSEServer(s, server.WithBaseURL(baseURL))
-		fmt.Printf("QWeather MCP server running on SSE, listening at %s\n", addr)
+		fmt.Printf("QWeather MCP server running on SSE transport, listening at %s\n", addr)
+		fmt.Printf("SSE endpoint: %s/sse\n", baseURL)
 		if err := sseServer.Start(addr); err != nil {
-			log.Fatalf("Server error: %v", err)
+			log.Fatalf("SSE server error: %v", err)
 		}
+
+	case "streamable":
+		baseURL := "http://localhost:" + port
+		fmt.Printf("QWeather MCP server running on Streamable HTTP transport, listening at %s\n", addr)
+		fmt.Printf("HTTP endpoint: %s\n", baseURL)
+		
+		// Create Streamable HTTP server (official implementation)
+		httpServer := server.NewStreamableHTTPServer(s)
+		if err := httpServer.Start(addr); err != nil {
+			log.Fatalf("Streamable HTTP server error: %v", err)
+		}
+
+	default:
+		log.Fatalf("Unsupported transport type: %s", transport)
 	}
 }
