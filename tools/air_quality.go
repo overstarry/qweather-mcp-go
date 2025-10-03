@@ -6,41 +6,64 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/overstarry/qweather-mcp-go/api"
 	"github.com/overstarry/qweather-mcp-go/utils"
 )
 
-// RegisterAirQualityTools Register air quality related tools
-func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
-	// Real-time air quality tool
-	airQualityTool := mcp.NewTool("get-air-quality",
-		mcp.WithDescription("Real-time air quality API provides air quality data for specific locations with 1x1 kilometer precision. Includes AQI based on different national/regional local standards, AQI level, color, main pollutants, QWeather universal AQI, pollutant concentrations, sub-indices, health recommendations, and related monitoring station information."),
-		mcp.WithString("cityName",
-			mcp.Required(),
-			mcp.Description("Name of the city to query air quality for"),
-		),
-	)
+// AirQualityInput input parameters for get-air-quality tool
+type AirQualityInput struct {
+	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query air quality for"`
+}
 
-	s.AddTool(airQualityTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		cityName := mcp.ParseString(request, "cityName", "")
-		if cityName == "" {
-			return mcp.NewToolResultError("City name cannot be empty"), nil
+// AirQualityOutput output structure for get-air-quality tool
+type AirQualityOutput struct {
+	AirQualityInfo string `json:"airQualityInfo" jsonschema_description:"Formatted air quality information"`
+}
+
+// AirQualityHourlyInput input parameters for get-air-quality-hourly tool
+type AirQualityHourlyInput struct {
+	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query air quality forecast for"`
+}
+
+// AirQualityHourlyOutput output structure for get-air-quality-hourly tool
+type AirQualityHourlyOutput struct {
+	HourlyInfo string `json:"hourlyInfo" jsonschema_description:"Formatted hourly air quality forecast"`
+}
+
+// AirQualityDailyInput input parameters for get-air-quality-daily tool
+type AirQualityDailyInput struct {
+	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query air quality forecast for"`
+}
+
+// AirQualityDailyOutput output structure for get-air-quality-daily tool
+type AirQualityDailyOutput struct {
+	DailyInfo string `json:"dailyInfo" jsonschema_description:"Formatted daily air quality forecast"`
+}
+
+// RegisterAirQualityTools Register air quality related tools
+func RegisterAirQualityTools(s *mcp.Server, client *api.Client) {
+	// Real-time air quality tool
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "get-air-quality",
+		Description: "Real-time air quality API provides air quality data for specific locations with 1x1 kilometer precision. Includes AQI based on different national/regional local standards, AQI level, color, main pollutants, QWeather universal AQI, pollutant concentrations, sub-indices, health recommendations, and related monitoring station information.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input AirQualityInput) (*mcp.CallToolResult, AirQualityOutput, error) {
+		if input.CityName == "" {
+			return nil, AirQualityOutput{}, fmt.Errorf("city name cannot be empty")
 		}
 
 		// Query city coordinates
-		locationData, err := client.GetLocationByName(cityName)
+		locationData, err := client.GetLocationByName(input.CityName)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to query city", err), nil
+			return nil, AirQualityOutput{}, fmt.Errorf("failed to query city: %w", err)
 		}
 
 		if locationData.Code != "200" {
-			return mcp.NewToolResultError("Failed to query city, API returned an error"), nil
+			return nil, AirQualityOutput{}, fmt.Errorf("failed to query city, API returned an error")
 		}
 
 		if len(locationData.Location) == 0 {
-			return mcp.NewToolResultError("No matching city found"), nil
+			return nil, AirQualityOutput{}, fmt.Errorf("no matching city found")
 		}
 
 		// Use the coordinates of the first matching city
@@ -52,14 +75,12 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 		// Get air quality data
 		airQualityData, err := client.GetAirQuality(lat, lon)
 		if err != nil {
-			errorMsg := fmt.Sprintf("Failed to get air quality data: %v (Coordinates: lat=%s, lon=%s)", err, lat, lon)
-			return mcp.NewToolResultError(errorMsg), nil
+			return nil, AirQualityOutput{}, fmt.Errorf("failed to get air quality data: %v (Coordinates: lat=%s, lon=%s)", err, lat, lon)
 		}
 
 		if airQualityData.Code != "200" && airQualityData.Code != "unknown" {
-			errorMsg := fmt.Sprintf("Failed to get air quality data: API returned error code %s (Coordinates: lat=%s, lon=%s)",
+			return nil, AirQualityOutput{}, fmt.Errorf("failed to get air quality data: API returned error code %s (Coordinates: lat=%s, lon=%s)",
 				airQualityData.Code, lat, lon)
-			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		// Even if Code is "unknown", we need to confirm that the indexes array is not empty
@@ -69,9 +90,8 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 		}
 
 		if len(airQualityData.Indexes) == 0 {
-			errorMsg := fmt.Sprintf("Failed to get air quality data: API returned success but no air quality indexes found (Coordinates: lat=%s, lon=%s, Code=%s)",
+			return nil, AirQualityOutput{}, fmt.Errorf("failed to get air quality data: API returned success but no air quality indexes found (Coordinates: lat=%s, lon=%s, Code=%s)",
 				lat, lon, airQualityData.Code)
-			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		// Format air quality information
@@ -91,22 +111,18 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 			}
 
 			if index.Category != "" {
-				// Use English directly
 				indexInfo = append(indexInfo, fmt.Sprintf("Category: %s", index.Category))
 			}
 
 			if index.PrimaryPollutant != nil {
-				// Use English directly
 				indexInfo = append(indexInfo, fmt.Sprintf("Main Pollutant: %s", index.PrimaryPollutant.Name))
 			}
 
 			if index.Health != nil {
 				healthInfo := []string{
 					"Health Effects:",
-					// Use English directly
 					fmt.Sprintf("- %s", index.Health.Effect),
 					"Health Recommendations:",
-					// Use English directly
 					fmt.Sprintf("- General Population: %s", index.Health.Advice.GeneralPopulation),
 					fmt.Sprintf("- Sensitive Population: %s", index.Health.Advice.SensitivePopulation),
 				}
@@ -119,7 +135,6 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 
 		airQualityText = append(airQualityText, "", "Pollutant Concentrations:")
 		for _, pollutant := range airQualityData.Pollutants {
-			// Use English directly
 			airQualityText = append(airQualityText, fmt.Sprintf("%s: %.1f%s", pollutant.Name, pollutant.Concentration.Value, pollutant.Concentration.Unit))
 		}
 
@@ -130,36 +145,30 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 			}
 		}
 
-		return mcp.NewToolResultText(strings.Join(airQualityText, "\n")), nil
+		return nil, AirQualityOutput{AirQualityInfo: strings.Join(airQualityText, "\n")}, nil
 	})
 
 	// Hourly air quality forecast tool
-	airQualityHourlyTool := mcp.NewTool("get-air-quality-hourly",
-		mcp.WithDescription("Hourly air quality forecast API provides air quality data for the next 24 hours, including AQI, pollutant concentrations, sub-indices, and health recommendations. Data includes various air quality standards (such as QAQI, GB-DEFRA, etc.) and specific concentrations of pollutants like PM2.5, PM10, NO2, O3, SO2, etc."),
-		mcp.WithString("cityName",
-			mcp.Required(),
-			mcp.Description("Name of the city to query air quality forecast for"),
-		),
-	)
-
-	s.AddTool(airQualityHourlyTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		cityName := mcp.ParseString(request, "cityName", "")
-		if cityName == "" {
-			return mcp.NewToolResultError("City name cannot be empty"), nil
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "get-air-quality-hourly",
+		Description: "Hourly air quality forecast API provides air quality data for the next 24 hours, including AQI, pollutant concentrations, sub-indices, and health recommendations. Data includes various air quality standards (such as QAQI, GB-DEFRA, etc.) and specific concentrations of pollutants like PM2.5, PM10, NO2, O3, SO2, etc.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input AirQualityHourlyInput) (*mcp.CallToolResult, AirQualityHourlyOutput, error) {
+		if input.CityName == "" {
+			return nil, AirQualityHourlyOutput{}, fmt.Errorf("city name cannot be empty")
 		}
 
 		// Query city coordinates
-		locationData, err := client.GetLocationByName(cityName)
+		locationData, err := client.GetLocationByName(input.CityName)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to query city", err), nil
+			return nil, AirQualityHourlyOutput{}, fmt.Errorf("failed to query city: %w", err)
 		}
 
 		if locationData.Code != "200" {
-			return mcp.NewToolResultError("Failed to query city, API returned an error"), nil
+			return nil, AirQualityHourlyOutput{}, fmt.Errorf("failed to query city, API returned an error")
 		}
 
 		if len(locationData.Location) == 0 {
-			return mcp.NewToolResultError("No matching city found"), nil
+			return nil, AirQualityHourlyOutput{}, fmt.Errorf("no matching city found")
 		}
 
 		// Use the coordinates of the first matching city
@@ -171,14 +180,12 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 		// Get hourly air quality forecast data
 		airQualityData, err := client.GetAirQualityHourly(lat, lon)
 		if err != nil {
-			errorMsg := fmt.Sprintf("Failed to get hourly air quality forecast data: %v (Coordinates: lat=%s, lon=%s)", err, lat, lon)
-			return mcp.NewToolResultError(errorMsg), nil
+			return nil, AirQualityHourlyOutput{}, fmt.Errorf("failed to get hourly air quality forecast data: %v (Coordinates: lat=%s, lon=%s)", err, lat, lon)
 		}
 
 		if airQualityData.Code != "200" && airQualityData.Code != "unknown" {
-			errorMsg := fmt.Sprintf("Failed to get hourly air quality forecast data: API returned error code %s (Coordinates: lat=%s, lon=%s)",
+			return nil, AirQualityHourlyOutput{}, fmt.Errorf("failed to get hourly air quality forecast data: API returned error code %s (Coordinates: lat=%s, lon=%s)",
 				airQualityData.Code, lat, lon)
-			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		// Even if Code is "unknown", we need to confirm that the hours array is not empty
@@ -188,9 +195,8 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 		}
 
 		if len(airQualityData.Hours) == 0 {
-			errorMsg := fmt.Sprintf("Failed to get hourly air quality forecast data: API returned success but no forecast hours found (Coordinates: lat=%s, lon=%s, Code=%s)",
+			return nil, AirQualityHourlyOutput{}, fmt.Errorf("failed to get hourly air quality forecast data: API returned success but no forecast hours found (Coordinates: lat=%s, lon=%s, Code=%s)",
 				lat, lon, airQualityData.Code)
-			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		// Format hourly air quality forecast information
@@ -219,7 +225,6 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 
 				primaryPollutant := ""
 				if index.PrimaryPollutant != nil {
-					// Use English directly
 					primaryPollutant = fmt.Sprintf("  Main Pollutant: %s", index.PrimaryPollutant.Name)
 				}
 
@@ -238,7 +243,6 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 			if len(hour.Pollutants) > 0 {
 				pollutantInfos = append(pollutantInfos, "Pollutant Concentrations:")
 				for _, pollutant := range hour.Pollutants {
-					// Use English directly
 					pollutantInfos = append(pollutantInfos, fmt.Sprintf("  %s: %.1f%s",
 						pollutant.Name,
 						pollutant.Concentration.Value,
@@ -257,36 +261,30 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 			hourlyText = append(hourlyText, strings.Join(hourInfo, "\n\n"))
 		}
 
-		return mcp.NewToolResultText(strings.Join(hourlyText, "\n")), nil
+		return nil, AirQualityHourlyOutput{HourlyInfo: strings.Join(hourlyText, "\n")}, nil
 	})
 
 	// Daily air quality forecast tool
-	airQualityDailyTool := mcp.NewTool("get-air-quality-daily",
-		mcp.WithDescription("Daily air quality forecast API provides air quality predictions for the next 3 days, including AQI values, pollutant concentrations, and health recommendations. Data includes various air quality standards and specific concentrations of pollutants such as PM2.5, PM10, NO2, O3, SO2, etc."),
-		mcp.WithString("cityName",
-			mcp.Required(),
-			mcp.Description("Name of the city to query air quality forecast for"),
-		),
-	)
-
-	s.AddTool(airQualityDailyTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		cityName := mcp.ParseString(request, "cityName", "")
-		if cityName == "" {
-			return mcp.NewToolResultError("City name cannot be empty"), nil
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "get-air-quality-daily",
+		Description: "Daily air quality forecast API provides air quality predictions for the next 3 days, including AQI values, pollutant concentrations, and health recommendations. Data includes various air quality standards and specific concentrations of pollutants such as PM2.5, PM10, NO2, O3, SO2, etc.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input AirQualityDailyInput) (*mcp.CallToolResult, AirQualityDailyOutput, error) {
+		if input.CityName == "" {
+			return nil, AirQualityDailyOutput{}, fmt.Errorf("city name cannot be empty")
 		}
 
 		// Query city coordinates
-		locationData, err := client.GetLocationByName(cityName)
+		locationData, err := client.GetLocationByName(input.CityName)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to query city", err), nil
+			return nil, AirQualityDailyOutput{}, fmt.Errorf("failed to query city: %w", err)
 		}
 
 		if locationData.Code != "200" {
-			return mcp.NewToolResultError("Failed to query city, API returned an error"), nil
+			return nil, AirQualityDailyOutput{}, fmt.Errorf("failed to query city, API returned an error")
 		}
 
 		if len(locationData.Location) == 0 {
-			return mcp.NewToolResultError("No matching city found"), nil
+			return nil, AirQualityDailyOutput{}, fmt.Errorf("no matching city found")
 		}
 
 		// Use the coordinates of the first matching city
@@ -298,15 +296,13 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 		// Get daily air quality forecast data
 		airQualityData, err := client.GetAirQualityDaily(lat, lon)
 		if err != nil {
-			errorMsg := fmt.Sprintf("Failed to get daily air quality forecast data: %v (Coordinates: lat=%s, lon=%s)", err, lat, lon)
-			return mcp.NewToolResultError(errorMsg), nil
+			return nil, AirQualityDailyOutput{}, fmt.Errorf("failed to get daily air quality forecast data: %v (Coordinates: lat=%s, lon=%s)", err, lat, lon)
 		}
 
 		// Handle the Code field returned by the API. If it's "unknown" (default value set by GetAirQualityDaily) and the days array is not empty, consider it a successful response
 		if airQualityData.Code != "200" && airQualityData.Code != "unknown" {
-			errorMsg := fmt.Sprintf("Failed to get daily air quality forecast data: API returned error code %s (Coordinates: lat=%s, lon=%s)",
+			return nil, AirQualityDailyOutput{}, fmt.Errorf("failed to get daily air quality forecast data: API returned error code %s (Coordinates: lat=%s, lon=%s)",
 				airQualityData.Code, lat, lon)
-			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		// Even if Code is "unknown", we need to confirm that the days array is not empty
@@ -316,9 +312,8 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 		}
 
 		if len(airQualityData.Days) == 0 {
-			errorMsg := fmt.Sprintf("Failed to get daily air quality forecast data: API returned success but no forecast days found (Coordinates: lat=%s, lon=%s, Code=%s)",
+			return nil, AirQualityDailyOutput{}, fmt.Errorf("failed to get daily air quality forecast data: API returned success but no forecast days found (Coordinates: lat=%s, lon=%s, Code=%s)",
 				lat, lon, airQualityData.Code)
-			return mcp.NewToolResultError(errorMsg), nil
 		}
 
 		// Format daily air quality forecast information
@@ -353,7 +348,6 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 
 				primaryPollutant := ""
 				if index.PrimaryPollutant != nil {
-					// Use English directly
 					primaryPollutant = fmt.Sprintf("  Main Pollutant: %s", index.PrimaryPollutant.Name)
 				}
 
@@ -372,7 +366,6 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 			if len(day.Pollutants) > 0 {
 				pollutantInfos = append(pollutantInfos, "Pollutant Concentrations:")
 				for _, pollutant := range day.Pollutants {
-					// Use English directly
 					pollutantInfos = append(pollutantInfos, fmt.Sprintf("  %s: %.1f%s",
 						pollutant.Name,
 						pollutant.Concentration.Value,
@@ -391,7 +384,7 @@ func RegisterAirQualityTools(s *server.MCPServer, client *api.Client) {
 			dailyText = append(dailyText, strings.Join(dayInfo, "\n\n"))
 		}
 
-		return mcp.NewToolResultText(strings.Join(dailyText, "\n")), nil
+		return nil, AirQualityDailyOutput{DailyInfo: strings.Join(dailyText, "\n")}, nil
 	})
 }
 
