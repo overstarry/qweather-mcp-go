@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/overstarry/qweather-mcp-go/api"
+	"github.com/overstarry/qweather-mcp-go/middlewares"
 	"github.com/overstarry/qweather-mcp-go/tools"
 )
 
@@ -38,12 +41,10 @@ func main() {
 	client := api.NewClient(baseURL, apiKey)
 
 	// Create MCP server
-	s := server.NewMCPServer(
-		"qweather",
-		"1.0.0",
-		server.WithLogging(),
-		server.WithRecovery(),
-	)
+	s := mcp.NewServer(&mcp.Implementation{
+		Name:    "qweather",
+		Version: "1.0.0",
+	}, nil)
 
 	// Register tools
 	tools.RegisterWeatherTools(s, client)
@@ -52,32 +53,47 @@ func main() {
 
 	// Start server based on transport type
 	addr := ":" + port
-
+	ctx := context.Background()
 	switch transport {
 	case "stdio":
 		fmt.Println("QWeather MCP server running on stdio transport")
-		if err := server.ServeStdio(s); err != nil {
-			log.Fatalf("Stdio server error: %v", err)
+		if err := s.Run(ctx, &mcp.StdioTransport{}); err != nil {
+			log.Fatal(err)
 		}
 
 	case "sse":
 		baseURL := "http://localhost:" + port
-		sseServer := server.NewSSEServer(s, server.WithBaseURL(baseURL))
+
+		// Create SSE HTTP handler
+		handler := mcp.NewSSEHandler(func(req *http.Request) *mcp.Server {
+			return s
+		}, &mcp.SSEOptions{})
+
+		handlerWithLogging := middlewares.LoggingHandler(handler)
 		fmt.Printf("QWeather MCP server running on SSE transport, listening at %s\n", addr)
-		fmt.Printf("SSE endpoint: %s/sse\n", baseURL)
-		if err := sseServer.Start(addr); err != nil {
+		log.Printf("MCP server listening on %s", baseURL)
+		fmt.Printf("SSE endpoint: %s\n", baseURL)
+
+		// Start the HTTP server with logging handler
+		if err := http.ListenAndServe(addr, handlerWithLogging); err != nil {
 			log.Fatalf("SSE server error: %v", err)
 		}
 
 	case "streamable":
 		baseURL := "http://localhost:" + port
-		fmt.Printf("QWeather MCP server running on Streamable HTTP transport, listening at %s\n", addr)
-		fmt.Printf("HTTP endpoint: %s\n", baseURL)
-		
+
 		// Create Streamable HTTP server (official implementation)
-		httpServer := server.NewStreamableHTTPServer(s)
-		if err := httpServer.Start(addr); err != nil {
-			log.Fatalf("Streamable HTTP server error: %v", err)
+		handler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
+			return s
+		}, nil)
+
+		handlerWithLogging := middlewares.LoggingHandler(handler)
+		fmt.Printf("QWeather MCP server running on Streamable HTTP transport, listening at %s\n", addr)
+		log.Printf("MCP server listening on %s", baseURL)
+
+		// Start the HTTP server with logging handler
+		if err := http.ListenAndServe(addr, handlerWithLogging); err != nil {
+			log.Fatalf("Server failed: %v", err)
 		}
 
 	default:
