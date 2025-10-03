@@ -11,7 +11,7 @@ import (
 
 // WeatherNowInput input parameters for get-weather-now tool
 type WeatherNowInput struct {
-	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query weather for"`
+	CityName string `json:"cityName" jsonschema:"Name of the city to query current weather for. Can be in any language (e.g. Beijing, 北京, New York, London)"`
 }
 
 // WeatherNowOutput output structure for get-weather-now tool
@@ -21,8 +21,8 @@ type WeatherNowOutput struct {
 
 // WeatherForecastInput input parameters for get-weather-forecast tool
 type WeatherForecastInput struct {
-	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query weather for"`
-	Days     string `json:"days" jsonschema:"required" jsonschema:"enum=3d,enum=7d,enum=10d,enum=15d,enum=30d" jsonschema_description:"Forecast days"`
+	CityName string `json:"cityName" jsonschema:"Name of the city to query weather forecast for (e.g. Beijing, New York, Tokyo)"`
+	Days     string `json:"days" jsonschema:"Number of forecast days. Valid values: 3d (3 days), 7d (7 days), 10d (10 days), 15d (15 days), or 30d (30 days)"`
 }
 
 // WeatherForecastOutput output structure for get-weather-forecast tool
@@ -32,7 +32,7 @@ type WeatherForecastOutput struct {
 
 // MinutelyPrecipitationInput input parameters for get-minutely-precipitation tool
 type MinutelyPrecipitationInput struct {
-	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query precipitation forecast for"`
+	CityName string `json:"cityName" jsonschema:"Name of the city to query minutely precipitation forecast for. Returns next 2 hours of precipitation data."`
 }
 
 // MinutelyPrecipitationOutput output structure for get-minutely-precipitation tool
@@ -42,8 +42,8 @@ type MinutelyPrecipitationOutput struct {
 
 // HourlyForecastInput input parameters for get-hourly-forecast tool
 type HourlyForecastInput struct {
-	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query weather for"`
-	Hours    string `json:"hours,omitempty" jsonschema_description:"Forecast hours (24h, 72h, or 168h). Defaults to 24h if not specified."`
+	CityName string `json:"cityName" jsonschema:"Name of the city to query hourly weather forecast for"`
+	Hours    string `json:"hours,omitempty" jsonschema:"Number of hours to forecast. Valid values: 24h (1 day), 72h (3 days), or 168h (7 days). Defaults to 24h if not specified."`
 }
 
 // HourlyForecastOutput output structure for get-hourly-forecast tool
@@ -53,7 +53,7 @@ type HourlyForecastOutput struct {
 
 // WeatherWarningInput input parameters for get-weather-warning tool
 type WeatherWarningInput struct {
-	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query weather warnings for"`
+	CityName string `json:"cityName" jsonschema:"Name of the city to query active weather warnings and alerts for"`
 }
 
 // WeatherWarningOutput output structure for get-weather-warning tool
@@ -128,6 +128,12 @@ func RegisterWeatherTools(s *mcp.Server, client *api.Client) {
 
 		if input.Days == "" {
 			input.Days = "3d"
+		}
+
+		// Validate days parameter format
+		validDays := map[string]bool{"3d": true, "7d": true, "10d": true, "15d": true, "30d": true}
+		if !validDays[input.Days] {
+			return nil, WeatherForecastOutput{}, fmt.Errorf("invalid days parameter: must be one of 3d, 7d, 10d, 15d, 30d")
 		}
 
 		// Query city ID
@@ -255,6 +261,12 @@ func RegisterWeatherTools(s *mcp.Server, client *api.Client) {
 
 		if input.Hours == "" {
 			input.Hours = "24h"
+		}
+
+		// Validate hours parameter format
+		validHours := map[string]bool{"24h": true, "72h": true, "168h": true}
+		if !validHours[input.Hours] {
+			return nil, HourlyForecastOutput{}, fmt.Errorf("invalid hours parameter: must be one of 24h, 72h, 168h")
 		}
 
 		// Query city ID
