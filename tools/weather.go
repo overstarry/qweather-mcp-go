@@ -5,40 +5,85 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/overstarry/qweather-mcp-go/api"
 )
 
-// RegisterWeatherTools Register weather-related tools
-func RegisterWeatherTools(s *server.MCPServer, client *api.Client) {
-	// Real-time weather tool
-	nowTool := mcp.NewTool("get-weather-now",
-		mcp.WithDescription("Real-time weather API provides current weather conditions for cities worldwide. Available data includes: temperature, feels-like temperature, weather conditions, wind direction, wind force level, relative humidity, precipitation, atmospheric pressure, and visibility. Data is updated in real-time, providing the most accurate current weather information."),
-		mcp.WithString("cityName",
-			mcp.Required(),
-			mcp.Description("Name of the city to query weather for"),
-		),
-	)
+// WeatherNowInput input parameters for get-weather-now tool
+type WeatherNowInput struct {
+	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query weather for"`
+}
 
-	s.AddTool(nowTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		cityName := mcp.ParseString(request, "cityName", "")
-		if cityName == "" {
-			return mcp.NewToolResultError("City name cannot be empty"), nil
+// WeatherNowOutput output structure for get-weather-now tool
+type WeatherNowOutput struct {
+	WeatherInfo string `json:"weatherInfo" jsonschema_description:"Formatted current weather information"`
+}
+
+// WeatherForecastInput input parameters for get-weather-forecast tool
+type WeatherForecastInput struct {
+	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query weather for"`
+	Days     string `json:"days" jsonschema:"required" jsonschema:"enum=3d,enum=7d,enum=10d,enum=15d,enum=30d" jsonschema_description:"Forecast days"`
+}
+
+// WeatherForecastOutput output structure for get-weather-forecast tool
+type WeatherForecastOutput struct {
+	ForecastInfo string `json:"forecastInfo" jsonschema_description:"Formatted weather forecast information"`
+}
+
+// MinutelyPrecipitationInput input parameters for get-minutely-precipitation tool
+type MinutelyPrecipitationInput struct {
+	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query precipitation forecast for"`
+}
+
+// MinutelyPrecipitationOutput output structure for get-minutely-precipitation tool
+type MinutelyPrecipitationOutput struct {
+	PrecipitationInfo string `json:"precipitationInfo" jsonschema_description:"Formatted minutely precipitation forecast"`
+}
+
+// HourlyForecastInput input parameters for get-hourly-forecast tool
+type HourlyForecastInput struct {
+	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query weather for"`
+	Hours    string `json:"hours,omitempty" jsonschema_description:"Forecast hours (24h, 72h, or 168h). Defaults to 24h if not specified."`
+}
+
+// HourlyForecastOutput output structure for get-hourly-forecast tool
+type HourlyForecastOutput struct {
+	HourlyInfo string `json:"hourlyInfo" jsonschema_description:"Formatted hourly weather forecast"`
+}
+
+// WeatherWarningInput input parameters for get-weather-warning tool
+type WeatherWarningInput struct {
+	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query weather warnings for"`
+}
+
+// WeatherWarningOutput output structure for get-weather-warning tool
+type WeatherWarningOutput struct {
+	WarningInfo string `json:"warningInfo" jsonschema_description:"Formatted weather warning information"`
+}
+
+// RegisterWeatherTools Register weather-related tools
+func RegisterWeatherTools(s *mcp.Server, client *api.Client) {
+	// Real-time weather tool
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "get-weather-now",
+		Description: "Real-time weather API provides current weather conditions for cities worldwide. Available data includes: temperature, feels-like temperature, weather conditions, wind direction, wind force level, relative humidity, precipitation, atmospheric pressure, and visibility. Data is updated in real-time, providing the most accurate current weather information.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input WeatherNowInput) (*mcp.CallToolResult, WeatherNowOutput, error) {
+		if input.CityName == "" {
+			return nil, WeatherNowOutput{}, fmt.Errorf("city name cannot be empty")
 		}
 
 		// Query city ID
-		locationData, err := client.GetLocationByName(cityName)
+		locationData, err := client.GetLocationByName(input.CityName)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to query city", err), nil
+			return nil, WeatherNowOutput{}, fmt.Errorf("failed to query city: %w", err)
 		}
 
 		if locationData.Code != "200" {
-			return mcp.NewToolResultError("Failed to query city, API returned an error"), nil
+			return nil, WeatherNowOutput{}, fmt.Errorf("failed to query city, API returned an error")
 		}
 
 		if len(locationData.Location) == 0 {
-			return mcp.NewToolResultError("No matching city found"), nil
+			return nil, WeatherNowOutput{}, fmt.Errorf("no matching city found")
 		}
 
 		// Use the ID of the first matching city
@@ -48,11 +93,11 @@ func RegisterWeatherTools(s *server.MCPServer, client *api.Client) {
 		// Get real-time weather data
 		weatherData, err := client.GetWeatherNow(cityID)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to get real-time weather data", err), nil
+			return nil, WeatherNowOutput{}, fmt.Errorf("failed to get real-time weather data: %w", err)
 		}
 
 		if weatherData.Code != "200" {
-			return mcp.NewToolResultError("Failed to get real-time weather data, API returned an error"), nil
+			return nil, WeatherNowOutput{}, fmt.Errorf("failed to get real-time weather data, API returned an error")
 		}
 
 		// Format weather information
@@ -69,43 +114,34 @@ func RegisterWeatherTools(s *server.MCPServer, client *api.Client) {
 			fmt.Sprintf("Last Updated: %s", weatherData.UpdateTime),
 		}
 
-		return mcp.NewToolResultText(strings.Join(weatherText, "\n")), nil
+		return nil, WeatherNowOutput{WeatherInfo: strings.Join(weatherText, "\n")}, nil
 	})
 
 	// Weather forecast tool
-	forecastTool := mcp.NewTool("get-weather-forecast",
-		mcp.WithDescription("Weather forecast API provides detailed weather predictions for cities worldwide, supporting forecasts from 3 to 30 days. Available data includes: sunrise/sunset times, moonrise/moonset times, temperature range, weather conditions, wind direction and speed, relative humidity, precipitation, atmospheric pressure, cloud cover, and UV index. Forecasts are updated daily to ensure accuracy."),
-		mcp.WithString("cityName",
-			mcp.Required(),
-			mcp.Description("Name of the city to query weather for"),
-		),
-		mcp.WithString("days",
-			mcp.Required(),
-			mcp.Enum("3d", "7d", "10d", "15d", "30d"),
-			mcp.Description("Forecast days"),
-		),
-	)
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "get-weather-forecast",
+		Description: "Weather forecast API provides detailed weather predictions for cities worldwide, supporting forecasts from 3 to 30 days. Available data includes: sunrise/sunset times, moonrise/moonset times, temperature range, weather conditions, wind direction and speed, relative humidity, precipitation, atmospheric pressure, cloud cover, and UV index. Forecasts are updated daily to ensure accuracy.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input WeatherForecastInput) (*mcp.CallToolResult, WeatherForecastOutput, error) {
+		if input.CityName == "" {
+			return nil, WeatherForecastOutput{}, fmt.Errorf("city name cannot be empty")
+		}
 
-	s.AddTool(forecastTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		cityName := mcp.ParseString(request, "cityName", "")
-		days := mcp.ParseString(request, "days", "3d")
-
-		if cityName == "" {
-			return mcp.NewToolResultError("City name cannot be empty"), nil
+		if input.Days == "" {
+			input.Days = "3d"
 		}
 
 		// Query city ID
-		locationData, err := client.GetLocationByName(cityName)
+		locationData, err := client.GetLocationByName(input.CityName)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to query city", err), nil
+			return nil, WeatherForecastOutput{}, fmt.Errorf("failed to query city: %w", err)
 		}
 
 		if locationData.Code != "200" {
-			return mcp.NewToolResultError("Failed to query city, API returned an error"), nil
+			return nil, WeatherForecastOutput{}, fmt.Errorf("failed to query city, API returned an error")
 		}
 
 		if len(locationData.Location) == 0 {
-			return mcp.NewToolResultError("No matching city found"), nil
+			return nil, WeatherForecastOutput{}, fmt.Errorf("no matching city found")
 		}
 
 		// Use the ID of the first matching city
@@ -113,18 +149,18 @@ func RegisterWeatherTools(s *server.MCPServer, client *api.Client) {
 		cityInfo := locationData.Location[0]
 
 		// Get weather forecast data
-		weatherData, err := client.GetWeatherForecast(cityID, days)
+		weatherData, err := client.GetWeatherForecast(cityID, input.Days)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to get weather forecast data", err), nil
+			return nil, WeatherForecastOutput{}, fmt.Errorf("failed to get weather forecast data: %w", err)
 		}
 
 		if weatherData.Code != "200" {
-			return mcp.NewToolResultError("Failed to get weather forecast data, API returned an error"), nil
+			return nil, WeatherForecastOutput{}, fmt.Errorf("failed to get weather forecast data, API returned an error")
 		}
 
 		// Format weather forecast information
 		forecastText := []string{
-			fmt.Sprintf("%s Day Weather Forecast - %s (%s %s):", strings.Replace(days, "d", "", -1), cityInfo.Name, cityInfo.Adm1, cityInfo.Adm2),
+			fmt.Sprintf("%s Day Weather Forecast - %s (%s %s):", strings.Replace(input.Days, "d", "", -1), cityInfo.Name, cityInfo.Adm1, cityInfo.Adm2),
 			fmt.Sprintf("Last Updated: %s", weatherData.UpdateTime),
 			"",
 		}
@@ -145,36 +181,30 @@ func RegisterWeatherTools(s *server.MCPServer, client *api.Client) {
 			forecastText = append(forecastText, strings.Join(dayForecast, "\n"))
 		}
 
-		return mcp.NewToolResultText(strings.Join(forecastText, "\n")), nil
+		return nil, WeatherForecastOutput{ForecastInfo: strings.Join(forecastText, "\n")}, nil
 	})
 
 	// Minutely precipitation forecast tool
-	minutelyTool := mcp.NewTool("get-minutely-precipitation",
-		mcp.WithDescription("Minutely precipitation forecast API provides accurate precipitation predictions for the next 2 hours for cities worldwide. Available data includes precipitation type (rain/snow) and amount for each minute. This high-precision forecast is particularly useful for outdoor activity planning and real-time weather monitoring."),
-		mcp.WithString("cityName",
-			mcp.Required(),
-			mcp.Description("Name of the city to query precipitation forecast for"),
-		),
-	)
-
-	s.AddTool(minutelyTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		cityName := mcp.ParseString(request, "cityName", "")
-		if cityName == "" {
-			return mcp.NewToolResultError("City name cannot be empty"), nil
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "get-minutely-precipitation",
+		Description: "Minutely precipitation forecast API provides accurate precipitation predictions for the next 2 hours for cities worldwide. Available data includes precipitation type (rain/snow) and amount for each minute. This high-precision forecast is particularly useful for outdoor activity planning and real-time weather monitoring.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input MinutelyPrecipitationInput) (*mcp.CallToolResult, MinutelyPrecipitationOutput, error) {
+		if input.CityName == "" {
+			return nil, MinutelyPrecipitationOutput{}, fmt.Errorf("city name cannot be empty")
 		}
 
 		// Query city location coordinates
-		locationData, err := client.GetLocationByName(cityName)
+		locationData, err := client.GetLocationByName(input.CityName)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to query city", err), nil
+			return nil, MinutelyPrecipitationOutput{}, fmt.Errorf("failed to query city: %w", err)
 		}
 
 		if locationData.Code != "200" {
-			return mcp.NewToolResultError("Failed to query city, API returned an error"), nil
+			return nil, MinutelyPrecipitationOutput{}, fmt.Errorf("failed to query city, API returned an error")
 		}
 
 		if len(locationData.Location) == 0 {
-			return mcp.NewToolResultError("No matching city found"), nil
+			return nil, MinutelyPrecipitationOutput{}, fmt.Errorf("no matching city found")
 		}
 
 		// Use the coordinates of the first matching city
@@ -184,11 +214,11 @@ func RegisterWeatherTools(s *server.MCPServer, client *api.Client) {
 		// Get minutely precipitation forecast data
 		precipData, err := client.GetMinutelyPrecipitation(location)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to get minutely precipitation forecast data", err), nil
+			return nil, MinutelyPrecipitationOutput{}, fmt.Errorf("failed to get minutely precipitation forecast data: %w", err)
 		}
 
 		if precipData.Code != "200" {
-			return mcp.NewToolResultError("Failed to get minutely precipitation forecast data, API returned an error"), nil
+			return nil, MinutelyPrecipitationOutput{}, fmt.Errorf("failed to get minutely precipitation forecast data, API returned an error")
 		}
 
 		// Format precipitation forecast information
@@ -211,42 +241,34 @@ func RegisterWeatherTools(s *server.MCPServer, client *api.Client) {
 
 		precipText = append(precipText, "", fmt.Sprintf("Data Source: %s", precipData.FxLink))
 
-		return mcp.NewToolResultText(strings.Join(precipText, "\n")), nil
+		return nil, MinutelyPrecipitationOutput{PrecipitationInfo: strings.Join(precipText, "\n")}, nil
 	})
 
 	// Hourly weather forecast tool
-	hourlyTool := mcp.NewTool("get-hourly-forecast",
-		mcp.WithDescription("Hourly weather forecast API provides detailed weather information for the next 24-168 hours for cities worldwide. Available data includes: temperature, weather conditions, wind force, wind speed, wind direction, relative humidity, atmospheric pressure, precipitation probability, dew point temperature, and cloud cover. Forecast data is updated hourly to ensure accuracy."),
-		mcp.WithString("cityName",
-			mcp.Required(),
-			mcp.Description("Name of the city to query weather for"),
-		),
-		mcp.WithString("hours",
-			mcp.Enum("24h", "72h", "168h"),
-			mcp.Description("Forecast hours (24h, 72h or 168h)"),
-		),
-	)
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "get-hourly-forecast",
+		Description: "Hourly weather forecast API provides detailed weather information for the next 24-168 hours for cities worldwide. Available data includes: temperature, weather conditions, wind force, wind speed, wind direction, relative humidity, atmospheric pressure, precipitation probability, dew point temperature, and cloud cover. Forecast data is updated hourly to ensure accuracy.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input HourlyForecastInput) (*mcp.CallToolResult, HourlyForecastOutput, error) {
+		if input.CityName == "" {
+			return nil, HourlyForecastOutput{}, fmt.Errorf("city name cannot be empty")
+		}
 
-	s.AddTool(hourlyTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		cityName := mcp.ParseString(request, "cityName", "")
-		hours := mcp.ParseString(request, "hours", "24h")
-
-		if cityName == "" {
-			return mcp.NewToolResultError("City name cannot be empty"), nil
+		if input.Hours == "" {
+			input.Hours = "24h"
 		}
 
 		// Query city ID
-		locationData, err := client.GetLocationByName(cityName)
+		locationData, err := client.GetLocationByName(input.CityName)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to query city", err), nil
+			return nil, HourlyForecastOutput{}, fmt.Errorf("failed to query city: %w", err)
 		}
 
 		if locationData.Code != "200" {
-			return mcp.NewToolResultError("Failed to query city, API returned an error"), nil
+			return nil, HourlyForecastOutput{}, fmt.Errorf("failed to query city, API returned an error")
 		}
 
 		if len(locationData.Location) == 0 {
-			return mcp.NewToolResultError("No matching city found"), nil
+			return nil, HourlyForecastOutput{}, fmt.Errorf("no matching city found")
 		}
 
 		// Use the ID of the first matching city
@@ -254,18 +276,18 @@ func RegisterWeatherTools(s *server.MCPServer, client *api.Client) {
 		cityInfo := locationData.Location[0]
 
 		// Get hourly weather forecast data
-		hourlyData, err := client.GetHourlyForecast(cityID, hours)
+		hourlyData, err := client.GetHourlyForecast(cityID, input.Hours)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to get hourly weather forecast data", err), nil
+			return nil, HourlyForecastOutput{}, fmt.Errorf("failed to get hourly weather forecast data: %w", err)
 		}
 
 		if hourlyData.Code != "200" {
-			return mcp.NewToolResultError("Failed to get hourly weather forecast data, API returned an error"), nil
+			return nil, HourlyForecastOutput{}, fmt.Errorf("failed to get hourly weather forecast data, API returned an error")
 		}
 
 		// Format hourly weather forecast information
 		hourlyText := []string{
-			fmt.Sprintf("%s Hour Weather Forecast - %s (%s %s):", strings.Replace(hours, "h", "", -1), cityInfo.Name, cityInfo.Adm1, cityInfo.Adm2),
+			fmt.Sprintf("%s Hour Weather Forecast - %s (%s %s):", strings.Replace(input.Hours, "h", "", -1), cityInfo.Name, cityInfo.Adm1, cityInfo.Adm2),
 			fmt.Sprintf("Last Updated: %s", hourlyData.UpdateTime),
 			"",
 		}
@@ -294,36 +316,30 @@ func RegisterWeatherTools(s *server.MCPServer, client *api.Client) {
 			hourlyText = append(hourlyText, strings.Join(hourForecast, "\n"))
 		}
 
-		return mcp.NewToolResultText(strings.Join(hourlyText, "\n")), nil
+		return nil, HourlyForecastOutput{HourlyInfo: strings.Join(hourlyText, "\n")}, nil
 	})
 
 	// Weather warning tool
-	warningTool := mcp.NewTool("get-weather-warning",
-		mcp.WithDescription("Weather warning API provides real-time weather warning data issued by official agencies in China and multiple countries/regions worldwide. Data includes warning issuing agency, publication time, warning title, detailed warning information, warning level, warning type, and other relevant information."),
-		mcp.WithString("cityName",
-			mcp.Required(),
-			mcp.Description("Name of the city to query weather warnings for"),
-		),
-	)
-
-	s.AddTool(warningTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		cityName := mcp.ParseString(request, "cityName", "")
-		if cityName == "" {
-			return mcp.NewToolResultError("City name cannot be empty"), nil
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "get-weather-warning",
+		Description: "Weather warning API provides real-time weather warning data issued by official agencies in China and multiple countries/regions worldwide. Data includes warning issuing agency, publication time, warning title, detailed warning information, warning level, warning type, and other relevant information.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input WeatherWarningInput) (*mcp.CallToolResult, WeatherWarningOutput, error) {
+		if input.CityName == "" {
+			return nil, WeatherWarningOutput{}, fmt.Errorf("city name cannot be empty")
 		}
 
 		// Query city ID
-		locationData, err := client.GetLocationByName(cityName)
+		locationData, err := client.GetLocationByName(input.CityName)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to query city", err), nil
+			return nil, WeatherWarningOutput{}, fmt.Errorf("failed to query city: %w", err)
 		}
 
 		if locationData.Code != "200" {
-			return mcp.NewToolResultError("Failed to query city, API returned an error"), nil
+			return nil, WeatherWarningOutput{}, fmt.Errorf("failed to query city, API returned an error")
 		}
 
 		if len(locationData.Location) == 0 {
-			return mcp.NewToolResultError("No matching city found"), nil
+			return nil, WeatherWarningOutput{}, fmt.Errorf("no matching city found")
 		}
 
 		// Use the ID of the first matching city
@@ -333,16 +349,17 @@ func RegisterWeatherTools(s *server.MCPServer, client *api.Client) {
 		// Get weather warning data
 		warningData, err := client.GetWeatherWarning(cityID)
 		if err != nil {
-			return mcp.NewToolResultErrorFromErr("Failed to get weather warning data", err), nil
+			return nil, WeatherWarningOutput{}, fmt.Errorf("failed to get weather warning data: %w", err)
 		}
 
 		if warningData.Code != "200" {
-			return mcp.NewToolResultError("Failed to get weather warning data, API returned an error"), nil
+			return nil, WeatherWarningOutput{}, fmt.Errorf("failed to get weather warning data, API returned an error")
 		}
 
 		// Check if there are active weather warnings
 		if len(warningData.Warning) == 0 {
-			return mcp.NewToolResultText(fmt.Sprintf("Currently %s (%s %s) has no active weather warnings", cityInfo.Name, cityInfo.Adm1, cityInfo.Adm2)), nil
+			warningInfo := fmt.Sprintf("Currently %s (%s %s) has no active weather warnings", cityInfo.Name, cityInfo.Adm1, cityInfo.Adm2)
+			return nil, WeatherWarningOutput{WarningInfo: warningInfo}, nil
 		}
 
 		// Format weather warning information
@@ -376,6 +393,6 @@ func RegisterWeatherTools(s *server.MCPServer, client *api.Client) {
 			warningText = append(warningText, strings.Join(warningInfo, "\n"))
 		}
 
-		return mcp.NewToolResultText(strings.Join(warningText, "\n")), nil
+		return nil, WeatherWarningOutput{WarningInfo: strings.Join(warningText, "\n")}, nil
 	})
 }
