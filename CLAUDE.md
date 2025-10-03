@@ -90,7 +90,7 @@ qweather-mcp-go is an MCP (Model Context Protocol) server implementation that pr
   - Uses the official `NewStreamableHTTPServer` implementation from mcp-go v0.37.0
 
 ### Key Implementation Details
-- MCP server uses `github.com/mark3labs/mcp-go v0.37.0` framework
+- MCP server uses the official `github.com/modelcontextprotocol/go-sdk v1.0.0` framework
 - API client includes configurable timeout (10s default) and logging levels
 - All tools validate input parameters and return structured MCP responses
 - City lookups use QWeather's geocoding API before querying weather data
