@@ -13,32 +13,32 @@ import (
 
 // AirQualityInput input parameters for get-air-quality tool
 type AirQualityInput struct {
-	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query air quality for"`
+	CityName string `json:"cityName" jsonschema:"Name of the city to query real-time air quality for. Returns AQI, pollutants, and health recommendations."`
 }
 
 // AirQualityOutput output structure for get-air-quality tool
 type AirQualityOutput struct {
-	AirQualityInfo string `json:"airQualityInfo" jsonschema_description:"Formatted air quality information"`
+	AirQualityInfo string `json:"airQualityInfo" jsonschema:"Formatted air quality information including AQI, pollutant levels, and health recommendations"`
 }
 
 // AirQualityHourlyInput input parameters for get-air-quality-hourly tool
 type AirQualityHourlyInput struct {
-	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query air quality forecast for"`
+	CityName string `json:"cityName" jsonschema:"Name of the city to query hourly air quality forecast for. Returns next 24 hours of AQI predictions."`
 }
 
 // AirQualityHourlyOutput output structure for get-air-quality-hourly tool
 type AirQualityHourlyOutput struct {
-	HourlyInfo string `json:"hourlyInfo" jsonschema_description:"Formatted hourly air quality forecast"`
+	HourlyInfo string `json:"hourlyInfo" jsonschema:"Formatted hourly air quality forecast with AQI and pollutant predictions"`
 }
 
 // AirQualityDailyInput input parameters for get-air-quality-daily tool
 type AirQualityDailyInput struct {
-	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query air quality forecast for"`
+	CityName string `json:"cityName" jsonschema:"Name of the city to query daily air quality forecast for. Returns next 5 days of AQI predictions."`
 }
 
 // AirQualityDailyOutput output structure for get-air-quality-daily tool
 type AirQualityDailyOutput struct {
-	DailyInfo string `json:"dailyInfo" jsonschema_description:"Formatted daily air quality forecast"`
+	DailyInfo string `json:"dailyInfo" jsonschema:"Formatted daily air quality forecast with AQI trends and predictions"`
 }
 
 // RegisterAirQualityTools Register air quality related tools

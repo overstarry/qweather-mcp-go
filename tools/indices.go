@@ -11,14 +11,14 @@ import (
 
 // WeatherIndicesInput input parameters for get-weather-indices tool
 type WeatherIndicesInput struct {
-	CityName string `json:"cityName" jsonschema:"required" jsonschema_description:"Name of the city to query weather indices for"`
-	Type     string `json:"type,omitempty" jsonschema_description:"Type of weather index to retrieve (0-16). 0=all types, 1=sports, 2=car washing, 3=dressing, 4=fishing, 5=UV, 6=travel, 7=allergy, 8=cold, 9=comfort, 10=wind, 11=sunglasses, 12=makeup, 13=sunscreen, 14=traffic, 15=sports watching, 16=air pollution diffusion. Defaults to 0 (all types) if not specified."`
-	Days     string `json:"days,omitempty" jsonschema_description:"Forecast days (1d or 3d). Defaults to 1d if not specified."`
+	CityName string `json:"cityName" jsonschema:"Name of the city to query weather life indices for (e.g. UV index, comfort level)"`
+	Type     string `json:"type,omitempty" jsonschema:"Index type: 0=all, 1=sports, 2=car wash, 3=clothing, 4=fishing, 5=UV, 6=travel, 7=allergy, 8=cold, 9=comfort, 10=wind, 11=sunglasses, 12=makeup, 13=sunscreen, 14=traffic, 15=sports watching, 16=air pollution diffusion. Default is 0 (all)."`
+	Days     string `json:"days,omitempty" jsonschema:"Forecast duration: 1d (today) or 3d (3 days). Defaults to 1d if not specified."`
 }
 
 // WeatherIndicesOutput output structure for get-weather-indices tool
 type WeatherIndicesOutput struct {
-	IndicesInfo string `json:"indicesInfo" jsonschema_description:"Formatted weather indices information"`
+	IndicesInfo string `json:"indicesInfo" jsonschema:"Formatted weather life indices including UV, comfort, clothing suggestions, etc."`
 }
 
 // RegisterIndicesTools Register weather indices related tools
