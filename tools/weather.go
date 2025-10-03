@@ -16,7 +16,7 @@ type WeatherNowInput struct {
 
 // WeatherNowOutput output structure for get-weather-now tool
 type WeatherNowOutput struct {
-	WeatherInfo string `json:"weatherInfo" jsonschema_description:"Formatted current weather information"`
+	WeatherInfo string `json:"weatherInfo" jsonschema:"Formatted current weather information"`
 }
 
 // WeatherForecastInput input parameters for get-weather-forecast tool
@@ -27,7 +27,7 @@ type WeatherForecastInput struct {
 
 // WeatherForecastOutput output structure for get-weather-forecast tool
 type WeatherForecastOutput struct {
-	ForecastInfo string `json:"forecastInfo" jsonschema_description:"Formatted weather forecast information"`
+	ForecastInfo string `json:"forecastInfo" jsonschema:"Formatted weather forecast information"`
 }
 
 // MinutelyPrecipitationInput input parameters for get-minutely-precipitation tool
@@ -37,7 +37,7 @@ type MinutelyPrecipitationInput struct {
 
 // MinutelyPrecipitationOutput output structure for get-minutely-precipitation tool
 type MinutelyPrecipitationOutput struct {
-	PrecipitationInfo string `json:"precipitationInfo" jsonschema_description:"Formatted minutely precipitation forecast"`
+	PrecipitationInfo string `json:"precipitationInfo" jsonschema:"Formatted minutely precipitation forecast"`
 }
 
 // HourlyForecastInput input parameters for get-hourly-forecast tool
@@ -48,7 +48,7 @@ type HourlyForecastInput struct {
 
 // HourlyForecastOutput output structure for get-hourly-forecast tool
 type HourlyForecastOutput struct {
-	HourlyInfo string `json:"hourlyInfo" jsonschema_description:"Formatted hourly weather forecast"`
+	HourlyInfo string `json:"hourlyInfo" jsonschema:"Formatted hourly weather forecast"`
 }
 
 // WeatherWarningInput input parameters for get-weather-warning tool
@@ -58,7 +58,7 @@ type WeatherWarningInput struct {
 
 // WeatherWarningOutput output structure for get-weather-warning tool
 type WeatherWarningOutput struct {
-	WarningInfo string `json:"warningInfo" jsonschema_description:"Formatted weather warning information"`
+	WarningInfo string `json:"warningInfo" jsonschema:"Formatted weather warning information"`
 }
 
 // RegisterWeatherTools Register weather-related tools
