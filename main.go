@@ -72,7 +72,8 @@ func main() {
 			return s
 		}, &mcp.SSEOptions{})
 
-		handlerWithLogging := middlewares.LoggingHandler(handler)
+		// Apply middlewares: recovery first, then logging
+		handlerWithMiddlewares := middlewares.LoggingHandler(middlewares.RecoveryHandler(handler))
 		fmt.Printf("QWeather MCP server running on SSE transport, listening at %s\n", addr)
 		log.Printf("MCP server listening on %s", baseURL)
 		fmt.Printf("SSE endpoint: %s\n", baseURL)
@@ -80,7 +81,7 @@ func main() {
 		// Create HTTP server with graceful shutdown support
 		srv := &http.Server{
 			Addr:    addr,
-			Handler: handlerWithLogging,
+			Handler: handlerWithMiddlewares,
 		}
 
 		// Start server in background
@@ -112,14 +113,15 @@ func main() {
 			return s
 		}, nil)
 
-		handlerWithLogging := middlewares.LoggingHandler(handler)
+		// Apply middlewares: recovery first, then logging
+		handlerWithMiddlewares := middlewares.LoggingHandler(middlewares.RecoveryHandler(handler))
 		fmt.Printf("QWeather MCP server running on Streamable HTTP transport, listening at %s\n", addr)
 		log.Printf("MCP server listening on %s", baseURL)
 
 		// Create HTTP server with graceful shutdown support
 		srv := &http.Server{
 			Addr:    addr,
-			Handler: handlerWithLogging,
+			Handler: handlerWithMiddlewares,
 		}
 
 		// Start server in background
