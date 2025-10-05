@@ -15,9 +15,18 @@ RUN CGO_ENABLED=0 GOOS=linux go build -mod=readonly -trimpath -ldflags="-s -w" -
 ########################################################
 # Final stage
 ########################################################
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates --no-install-recommends && rm -rf /var/lib/apt/lists/*
+FROM alpine:latest
+RUN apk add --no-cache ca-certificates tzdata
+
+# Create non-root user
+RUN addgroup -g 1000 appuser && \
+    adduser -D -u 1000 -G appuser appuser
+
 WORKDIR /app
 COPY --from=builder /app/qweather-mcp-go ./qweather-mcp-go
-RUN chmod +x qweather-mcp-go
+RUN chown -R appuser:appuser /app
+
+USER appuser
+EXPOSE 8080
+
 ENTRYPOINT ["/app/qweather-mcp-go"]

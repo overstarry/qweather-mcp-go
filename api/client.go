@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,6 +9,19 @@ import (
 	"net/url"
 	"strings"
 	"time"
+)
+
+// API response status codes
+const (
+	APICodeSuccess      = "200"
+	APICodeUnauthorized = "401"
+	APICodeNotFound     = "404"
+	APICodeUnknown      = "unknown"
+)
+
+// Logging constants
+const (
+	MaxLogBodyLength = 1000 // Maximum length of response body to log
 )
 
 // Client QWeather API client
@@ -21,10 +35,19 @@ type Client struct {
 // NewClient Create a new API client
 func NewClient(baseURL, apiKey string) *Client {
 	return &Client{
-		BaseURL:    baseURL,
-		APIKey:     apiKey,
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
-		LogLevel:   LogLevelError, // Default to error logging only
+		BaseURL: baseURL,
+		APIKey:  apiKey,
+		HTTPClient: &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,              // Maximum idle connections across all hosts
+				MaxIdleConnsPerHost: 10,               // Maximum idle connections per host
+				IdleConnTimeout:     90 * time.Second, // How long idle connections stay alive
+				DisableCompression:  false,            // Enable compression
+				ForceAttemptHTTP2:   true,             // Enable HTTP/2
+			},
+		},
+		LogLevel: LogLevelError, // Default to error logging only
 	}
 }
 
@@ -35,6 +58,11 @@ func (c *Client) SetLogLevel(level LogLevel) {
 
 // MakeRequest Send API request
 func (c *Client) MakeRequest(endpoint string, params map[string]string, pathParams ...string) ([]byte, error) {
+	return c.MakeRequestWithContext(context.Background(), endpoint, params, pathParams...)
+}
+
+// MakeRequestWithContext Send API request with context support for timeout control
+func (c *Client) MakeRequestWithContext(ctx context.Context, endpoint string, params map[string]string, pathParams ...string) ([]byte, error) {
 	var urlStr string
 
 	// Handle path parameters
@@ -61,8 +89,8 @@ func (c *Client) MakeRequest(endpoint string, params map[string]string, pathPara
 	}
 	u.RawQuery = q.Encode()
 
-	// Create request
-	req, err := http.NewRequest("GET", u.String(), nil)
+	// Create request with context
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -79,7 +107,9 @@ func (c *Client) MakeRequest(endpoint string, params map[string]string, pathPara
 
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API request failed, status code: %d, URL: %s", resp.StatusCode, u.String())
+		// Sanitize URL by removing query parameters to prevent leaking sensitive info
+		sanitizedURL := fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, u.Path)
+		return nil, fmt.Errorf("API request failed, status code: %d, endpoint: %s", resp.StatusCode, sanitizedURL)
 	}
 
 	// Read response body
@@ -92,8 +122,8 @@ func (c *Client) MakeRequest(endpoint string, params map[string]string, pathPara
 	if c.LogLevel >= LogLevelDebug {
 		// Output full response at debug level
 		bodyPreview := string(body)
-		if len(bodyPreview) > 1000 {
-			bodyPreview = bodyPreview[:1000] + "... (truncated)"
+		if len(bodyPreview) > MaxLogBodyLength {
+			bodyPreview = bodyPreview[:MaxLogBodyLength] + "... (truncated)"
 		}
 		fmt.Printf("API Response [%s]: Status=%d, Body=%s\n", endpoint, resp.StatusCode, bodyPreview)
 	} else if c.LogLevel >= LogLevelInfo {
@@ -120,7 +150,39 @@ func (c *Client) GetLocationByName(cityName string) (*LocationResponse, error) {
 		return nil, fmt.Errorf("failed to parse location data: %w", err)
 	}
 
+	if response.Code != APICodeSuccess {
+		return nil, fmt.Errorf("API returned error code: %s", response.Code)
+	}
+
 	return &response, nil
+}
+
+// GetCityCoordinates Helper function to get city coordinates and info by name
+// This eliminates duplicate city lookup code across tools
+func (c *Client) GetCityCoordinates(cityName string) (lat, lon string, cityInfo *Location, err error) {
+	locationData, err := c.GetLocationByName(cityName)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to query city: %w", err)
+	}
+
+	if locationData.Code != APICodeSuccess {
+		return "", "", nil, fmt.Errorf("failed to query city, API returned error code: %s", locationData.Code)
+	}
+
+	if len(locationData.Location) == 0 {
+		return "", "", nil, fmt.Errorf("no matching city found")
+	}
+
+	info := &locationData.Location[0]
+	// Format coordinates, keep up to 2 decimal places
+	latF := 0.0
+	lonF := 0.0
+	fmt.Sscanf(info.Lat, "%f", &latF)
+	fmt.Sscanf(info.Lon, "%f", &lonF)
+	lat = fmt.Sprintf("%.2f", latF)
+	lon = fmt.Sprintf("%.2f", lonF)
+
+	return lat, lon, info, nil
 }
 
 // GetWeatherNow Get real-time weather
@@ -251,18 +313,22 @@ func (c *Client) GetAirQuality(lat, lon string) (*AirQualityResponse, error) {
 	if err := json.Unmarshal(data, &response); err != nil {
 		if c.LogLevel >= LogLevelError {
 			rawData := string(data)
-			fmt.Printf("Error parsing air quality data: %v, raw data: %s\n", err, rawData[:min(len(rawData), 500)])
+			fmt.Printf("Error parsing air quality data: %v, raw data: %s\n", err, rawData[:min(len(rawData), maxErrorLogLength)])
 		}
 		return nil, fmt.Errorf("failed to parse air quality data: %w", err)
 	}
 
-	// Check if Code field is empty and log warning
+	// Check if Code field is empty and handle it consistently
 	if response.Code == "" {
 		if c.LogLevel >= LogLevelInfo {
 			fmt.Printf("WARNING: Empty Code field in AirQualityResponse\n")
 		}
-		// Set a default error code for empty codes to prevent confusion in error messages
-		response.Code = "unknown"
+		// Empty code is treated as unknown/invalid response
+		if len(response.Indexes) == 0 {
+			return nil, fmt.Errorf("API returned invalid response: empty code and no data")
+		}
+		// If we have data, set a default code
+		response.Code = APICodeUnknown
 	}
 
 	return &response, nil
@@ -281,18 +347,22 @@ func (c *Client) GetAirQualityHourly(lat, lon string) (*AirQualityHourlyResponse
 	if err := json.Unmarshal(data, &response); err != nil {
 		if c.LogLevel >= LogLevelError {
 			rawData := string(data)
-			fmt.Printf("Error parsing hourly air quality data: %v, raw data: %s\n", err, rawData[:min(len(rawData), 500)])
+			fmt.Printf("Error parsing hourly air quality data: %v, raw data: %s\n", err, rawData[:min(len(rawData), maxErrorLogLength)])
 		}
 		return nil, fmt.Errorf("failed to parse hourly air quality data: %w", err)
 	}
 
-	// Check if Code field is empty and log warning
+	// Check if Code field is empty and handle it consistently
 	if response.Code == "" {
 		if c.LogLevel >= LogLevelInfo {
 			fmt.Printf("WARNING: Empty Code field in AirQualityHourlyResponse\n")
 		}
-		// Set a default error code for empty codes to prevent confusion in error messages
-		response.Code = "unknown"
+		// Empty code is treated as unknown/invalid response
+		if len(response.Hours) == 0 {
+			return nil, fmt.Errorf("API returned invalid response: empty code and no data")
+		}
+		// If we have data, set a default code
+		response.Code = APICodeUnknown
 	}
 
 	return &response, nil
@@ -305,6 +375,9 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// Logging truncation limit
+const maxErrorLogLength = 500
 
 // GetAirQualityDaily Get daily air quality forecast
 func (c *Client) GetAirQualityDaily(lat, lon string) (*AirQualityDailyResponse, error) {
@@ -319,18 +392,22 @@ func (c *Client) GetAirQualityDaily(lat, lon string) (*AirQualityDailyResponse, 
 	if err := json.Unmarshal(data, &response); err != nil {
 		if c.LogLevel >= LogLevelError {
 			rawData := string(data)
-			fmt.Printf("Error parsing daily air quality data: %v, raw data: %s\n", err, rawData[:min(len(rawData), 500)])
+			fmt.Printf("Error parsing daily air quality data: %v, raw data: %s\n", err, rawData[:min(len(rawData), maxErrorLogLength)])
 		}
 		return nil, fmt.Errorf("failed to parse daily air quality data: %w", err)
 	}
 
-	// Check if Code field is empty and log warning
+	// Check if Code field is empty and handle it consistently
 	if response.Code == "" {
 		if c.LogLevel >= LogLevelInfo {
 			fmt.Printf("WARNING: Empty Code field in AirQualityDailyResponse\n")
 		}
-		// Set a default error code for empty codes to prevent confusion in error messages
-		response.Code = "unknown"
+		// Empty code is treated as unknown/invalid response
+		if len(response.Days) == 0 {
+			return nil, fmt.Errorf("API returned invalid response: empty code and no data")
+		}
+		// If we have data, set a default code
+		response.Code = APICodeUnknown
 	}
 
 	return &response, nil

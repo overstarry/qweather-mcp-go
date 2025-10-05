@@ -7,6 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/overstarry/qweather-mcp-go/api"
@@ -74,10 +77,32 @@ func main() {
 		log.Printf("MCP server listening on %s", baseURL)
 		fmt.Printf("SSE endpoint: %s\n", baseURL)
 
-		// Start the HTTP server with logging handler
-		if err := http.ListenAndServe(addr, handlerWithLogging); err != nil {
-			log.Fatalf("SSE server error: %v", err)
+		// Create HTTP server with graceful shutdown support
+		srv := &http.Server{
+			Addr:    addr,
+			Handler: handlerWithLogging,
 		}
+
+		// Start server in background
+		go func() {
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("SSE server error: %v", err)
+			}
+		}()
+
+		// Wait for interrupt signal
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		<-quit
+		log.Println("Shutting down SSE server...")
+
+		// Graceful shutdown with 30 second timeout
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Fatal("SSE server forced to shutdown:", err)
+		}
+		log.Println("SSE server exited")
 
 	case "streamable":
 		baseURL := "http://localhost:" + port
@@ -91,10 +116,32 @@ func main() {
 		fmt.Printf("QWeather MCP server running on Streamable HTTP transport, listening at %s\n", addr)
 		log.Printf("MCP server listening on %s", baseURL)
 
-		// Start the HTTP server with logging handler
-		if err := http.ListenAndServe(addr, handlerWithLogging); err != nil {
-			log.Fatalf("Server failed: %v", err)
+		// Create HTTP server with graceful shutdown support
+		srv := &http.Server{
+			Addr:    addr,
+			Handler: handlerWithLogging,
 		}
+
+		// Start server in background
+		go func() {
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("Streamable server error: %v", err)
+			}
+		}()
+
+		// Wait for interrupt signal
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		<-quit
+		log.Println("Shutting down Streamable server...")
+
+		// Graceful shutdown with 30 second timeout
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Fatal("Streamable server forced to shutdown:", err)
+		}
+		log.Println("Streamable server exited")
 
 	default:
 		log.Fatalf("Unsupported transport type: %s", transport)

@@ -102,7 +102,8 @@ func RegisterWeatherTools(s *mcp.Server, client *api.Client) {
 
 		// Format weather information
 		now := weatherData.Now
-		weatherText := []string{
+		weatherText := make([]string, 0, 10) // Pre-allocate capacity
+		weatherText = []string{
 			fmt.Sprintf("Current Weather - %s (%s %s):", cityInfo.Name, cityInfo.Adm1, cityInfo.Adm2),
 			fmt.Sprintf("Temperature: %s°C (Feels like: %s°C)", now.Temp, now.FeelsLike),
 			fmt.Sprintf("Weather Condition: %s", now.Text),
@@ -165,11 +166,12 @@ func RegisterWeatherTools(s *mcp.Server, client *api.Client) {
 		}
 
 		// Format weather forecast information
-		forecastText := []string{
+		forecastText := make([]string, 0, len(weatherData.Daily)*10+3) // Pre-allocate capacity
+		forecastText = append(forecastText,
 			fmt.Sprintf("%s Day Weather Forecast - %s (%s %s):", strings.Replace(input.Days, "d", "", -1), cityInfo.Name, cityInfo.Adm1, cityInfo.Adm2),
 			fmt.Sprintf("Last Updated: %s", weatherData.UpdateTime),
 			"",
-		}
+		)
 
 		for _, day := range weatherData.Daily {
 			dayForecast := []string{

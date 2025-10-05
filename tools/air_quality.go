@@ -52,25 +52,11 @@ func RegisterAirQualityTools(s *mcp.Server, client *api.Client) {
 			return nil, AirQualityOutput{}, fmt.Errorf("city name cannot be empty")
 		}
 
-		// Query city coordinates
-		locationData, err := client.GetLocationByName(input.CityName)
+		// Get city coordinates using helper function
+		lat, lon, cityInfo, err := client.GetCityCoordinates(input.CityName)
 		if err != nil {
-			return nil, AirQualityOutput{}, fmt.Errorf("failed to query city: %w", err)
+			return nil, AirQualityOutput{}, err
 		}
-
-		if locationData.Code != "200" {
-			return nil, AirQualityOutput{}, fmt.Errorf("failed to query city, API returned an error")
-		}
-
-		if len(locationData.Location) == 0 {
-			return nil, AirQualityOutput{}, fmt.Errorf("no matching city found")
-		}
-
-		// Use the coordinates of the first matching city
-		cityInfo := locationData.Location[0]
-		// Format coordinates, keep up to 2 decimal places
-		lat := fmt.Sprintf("%.2f", parseFloat(cityInfo.Lat))
-		lon := fmt.Sprintf("%.2f", parseFloat(cityInfo.Lon))
 
 		// Get air quality data
 		airQualityData, err := client.GetAirQuality(lat, lon)
@@ -157,25 +143,11 @@ func RegisterAirQualityTools(s *mcp.Server, client *api.Client) {
 			return nil, AirQualityHourlyOutput{}, fmt.Errorf("city name cannot be empty")
 		}
 
-		// Query city coordinates
-		locationData, err := client.GetLocationByName(input.CityName)
+		// Get city coordinates using helper function
+		lat, lon, cityInfo, err := client.GetCityCoordinates(input.CityName)
 		if err != nil {
-			return nil, AirQualityHourlyOutput{}, fmt.Errorf("failed to query city: %w", err)
+			return nil, AirQualityHourlyOutput{}, err
 		}
-
-		if locationData.Code != "200" {
-			return nil, AirQualityHourlyOutput{}, fmt.Errorf("failed to query city, API returned an error")
-		}
-
-		if len(locationData.Location) == 0 {
-			return nil, AirQualityHourlyOutput{}, fmt.Errorf("no matching city found")
-		}
-
-		// Use the coordinates of the first matching city
-		cityInfo := locationData.Location[0]
-		// Format coordinates, keep up to 2 decimal places
-		lat := fmt.Sprintf("%.2f", parseFloat(cityInfo.Lat))
-		lon := fmt.Sprintf("%.2f", parseFloat(cityInfo.Lon))
 
 		// Get hourly air quality forecast data
 		airQualityData, err := client.GetAirQualityHourly(lat, lon)
@@ -273,25 +245,11 @@ func RegisterAirQualityTools(s *mcp.Server, client *api.Client) {
 			return nil, AirQualityDailyOutput{}, fmt.Errorf("city name cannot be empty")
 		}
 
-		// Query city coordinates
-		locationData, err := client.GetLocationByName(input.CityName)
+		// Get city coordinates using helper function
+		lat, lon, cityInfo, err := client.GetCityCoordinates(input.CityName)
 		if err != nil {
-			return nil, AirQualityDailyOutput{}, fmt.Errorf("failed to query city: %w", err)
+			return nil, AirQualityDailyOutput{}, err
 		}
-
-		if locationData.Code != "200" {
-			return nil, AirQualityDailyOutput{}, fmt.Errorf("failed to query city, API returned an error")
-		}
-
-		if len(locationData.Location) == 0 {
-			return nil, AirQualityDailyOutput{}, fmt.Errorf("no matching city found")
-		}
-
-		// Use the coordinates of the first matching city
-		cityInfo := locationData.Location[0]
-		// Format coordinates, keep up to 2 decimal places
-		lat := fmt.Sprintf("%.2f", parseFloat(cityInfo.Lat))
-		lon := fmt.Sprintf("%.2f", parseFloat(cityInfo.Lon))
 
 		// Get daily air quality forecast data
 		airQualityData, err := client.GetAirQualityDaily(lat, lon)
@@ -386,11 +344,4 @@ func RegisterAirQualityTools(s *mcp.Server, client *api.Client) {
 
 		return nil, AirQualityDailyOutput{DailyInfo: strings.Join(dailyText, "\n")}, nil
 	})
-}
-
-// parseFloat Parses string to float, returns 0 on error
-func parseFloat(s string) float64 {
-	var f float64
-	fmt.Sscanf(s, "%f", &f)
-	return f
 }
