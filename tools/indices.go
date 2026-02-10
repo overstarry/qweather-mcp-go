@@ -21,6 +21,70 @@ type WeatherIndicesOutput struct {
 	IndicesInfo string `json:"indicesInfo" jsonschema:"Formatted weather life indices including UV, comfort, clothing suggestions, etc."`
 }
 
+func handleWeatherIndices(client *api.Client, input WeatherIndicesInput) (WeatherIndicesOutput, error) {
+	if input.CityName == "" {
+		return WeatherIndicesOutput{}, fmt.Errorf("city name cannot be empty")
+	}
+
+	if input.Type == "" {
+		input.Type = "0"
+	}
+
+	if input.Days == "" {
+		input.Days = "1d"
+	}
+
+	locationData, err := client.GetLocationByName(input.CityName)
+	if err != nil {
+		return WeatherIndicesOutput{}, fmt.Errorf("failed to query city: %w", err)
+	}
+
+	if locationData.Code != "200" {
+		return WeatherIndicesOutput{}, fmt.Errorf("failed to query city, API returned an error")
+	}
+
+	if len(locationData.Location) == 0 {
+		return WeatherIndicesOutput{}, fmt.Errorf("no matching city found")
+	}
+
+	cityID := locationData.Location[0].ID
+	cityInfo := locationData.Location[0]
+
+	indicesData, err := client.GetWeatherIndices(cityID, input.Days, input.Type)
+	if err != nil {
+		return WeatherIndicesOutput{}, fmt.Errorf("failed to get weather indices data: %w", err)
+	}
+
+	if indicesData.Code != "200" {
+		return WeatherIndicesOutput{}, fmt.Errorf("failed to get weather indices data, API returned an error")
+	}
+
+	daysText := "1-day"
+	if input.Days == "3d" {
+		daysText = "3-day"
+	}
+
+	indicesText := []string{
+		fmt.Sprintf("%s Weather Indices - %s (%s %s):", daysText, cityInfo.Name, cityInfo.Adm1, cityInfo.Adm2),
+		fmt.Sprintf("Last Updated: %s", indicesData.UpdateTime),
+		"",
+	}
+
+	for _, index := range indicesData.Daily {
+		indexInfo := []string{
+			fmt.Sprintf("Date: %s", index.Date),
+			fmt.Sprintf("Index Type: %s", index.Name),
+			fmt.Sprintf("Level: %s", index.Level),
+			fmt.Sprintf("Category: %s", index.Category),
+			fmt.Sprintf("Recommendation: %s", index.Text),
+			"---",
+		}
+		indicesText = append(indicesText, strings.Join(indexInfo, "\n"))
+	}
+
+	return WeatherIndicesOutput{IndicesInfo: strings.Join(indicesText, "\n")}, nil
+}
+
 // RegisterIndicesTools Register weather indices related tools
 func RegisterIndicesTools(s *mcp.Server, client *api.Client) {
 	// Weather indices tool
@@ -46,70 +110,10 @@ func RegisterIndicesTools(s *mcp.Server, client *api.Client) {
 			"- Type 16: Air Pollution Diffusion Conditions (air pollution diffusion conditions)\n\n" +
 			"Note: Not all cities provide all indices. International cities mainly support types 1, 2, 4, and 5.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input WeatherIndicesInput) (*mcp.CallToolResult, WeatherIndicesOutput, error) {
-		if input.CityName == "" {
-			return nil, WeatherIndicesOutput{}, fmt.Errorf("city name cannot be empty")
-		}
-
-		if input.Type == "" {
-			input.Type = "0"
-		}
-
-		if input.Days == "" {
-			input.Days = "1d"
-		}
-
-		// Query city ID
-		locationData, err := client.GetLocationByName(input.CityName)
+		out, err := handleWeatherIndices(client, input)
 		if err != nil {
-			return nil, WeatherIndicesOutput{}, fmt.Errorf("failed to query city: %w", err)
+			return nil, WeatherIndicesOutput{}, err
 		}
-
-		if locationData.Code != "200" {
-			return nil, WeatherIndicesOutput{}, fmt.Errorf("failed to query city, API returned an error")
-		}
-
-		if len(locationData.Location) == 0 {
-			return nil, WeatherIndicesOutput{}, fmt.Errorf("no matching city found")
-		}
-
-		// Use the ID of the first matching city
-		cityID := locationData.Location[0].ID
-		cityInfo := locationData.Location[0]
-
-		// Get weather indices data
-		indicesData, err := client.GetWeatherIndices(cityID, input.Days, input.Type)
-		if err != nil {
-			return nil, WeatherIndicesOutput{}, fmt.Errorf("failed to get weather indices data: %w", err)
-		}
-
-		if indicesData.Code != "200" {
-			return nil, WeatherIndicesOutput{}, fmt.Errorf("failed to get weather indices data, API returned an error")
-		}
-
-		// Format weather indices information
-		daysText := "1-day"
-		if input.Days == "3d" {
-			daysText = "3-day"
-		}
-
-		indicesText := []string{
-			fmt.Sprintf("%s Weather Indices - %s (%s %s):", daysText, cityInfo.Name, cityInfo.Adm1, cityInfo.Adm2),
-			fmt.Sprintf("Last Updated: %s", indicesData.UpdateTime),
-			"",
-		}
-
-		for _, index := range indicesData.Daily {
-			indexInfo := []string{
-				fmt.Sprintf("Date: %s", index.Date),
-				fmt.Sprintf("Index Type: %s", index.Name),
-				fmt.Sprintf("Level: %s", index.Level),
-				fmt.Sprintf("Category: %s", index.Category),
-				fmt.Sprintf("Recommendation: %s", index.Text),
-				"---",
-			}
-			indicesText = append(indicesText, strings.Join(indexInfo, "\n"))
-		}
-
-		return nil, WeatherIndicesOutput{IndicesInfo: strings.Join(indicesText, "\n")}, nil
+		return nil, out, nil
 	})
 }

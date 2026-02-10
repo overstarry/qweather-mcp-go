@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -360,5 +361,180 @@ func TestMinFunction(t *testing.T) {
 		if result != tt.expected {
 			t.Errorf("min(%d, %d) = %d, expected %d", tt.a, tt.b, result, tt.expected)
 		}
+	}
+}
+
+func TestMakeRequest_PathParamsReplacement(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/foo/a/bar/b" {
+			t.Fatalf("path = %q, want %q", r.URL.Path, "/foo/a/bar/b")
+		}
+		if got := r.URL.Query().Get("q"); got != "a b" {
+			t.Fatalf("query q = %q, want %q", got, "a b")
+		}
+		if r.Header.Get("X-QW-Api-Key") != "test-key" {
+			t.Fatalf("X-QW-Api-Key = %q, want %q", r.Header.Get("X-QW-Api-Key"), "test-key")
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"code":"200"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	_, err := client.MakeRequest("/foo/{}/bar/{}", map[string]string{"q": "a b"}, "a", "b")
+	if err != nil {
+		t.Fatalf("MakeRequest failed: %v", err)
+	}
+}
+
+func TestMakeRequest_HTTPError_DoesNotLeakQuery(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+
+	_, err := client.MakeRequest("/test", map[string]string{"location": "secret"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	msg := err.Error()
+	if strings.Contains(msg, "location=") || strings.Contains(msg, "secret") {
+		t.Fatalf("error message leaked query params: %q", msg)
+	}
+	if !strings.Contains(msg, "/test") {
+		t.Fatalf("error message missing sanitized endpoint path: %q", msg)
+	}
+}
+
+func TestGetLocationByName_CodeError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"code":"404","location":[]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	_, err := client.GetLocationByName("Nowhere")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestGetCityCoordinates_NoLocationFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"code":"200","location":[]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	_, _, _, err := client.GetCityCoordinates("Nowhere")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "no matching city found") {
+		t.Fatalf("error = %q, want to contain %q", err.Error(), "no matching city found")
+	}
+}
+
+func TestGetCityCoordinates_CodeErrorWrapped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"code":"404","location":[]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	_, _, _, err := client.GetCityCoordinates("Nowhere")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to query city") {
+		t.Fatalf("error = %q, want to contain %q", err.Error(), "failed to query city")
+	}
+}
+
+func TestGetAirQualityEmptyCodeNoData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"indexes":[],"pollutants":[]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	_, err := client.GetAirQuality("39.90", "116.41")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestGetAirQualityHourlyEmptyCode_WithData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"hours":[{"forecastTime":"2024-01-01T00:00:00Z","indexes":[{"code":"qaqi","name":"QAQI","aqi":50,"aqiDisplay":"50"}],"pollutants":[]} ]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	got, err := client.GetAirQualityHourly("39.90", "116.41")
+	if err != nil {
+		t.Fatalf("GetAirQualityHourly failed: %v", err)
+	}
+	if got.Code != APICodeUnknown {
+		t.Fatalf("Code = %q, want %q", got.Code, APICodeUnknown)
+	}
+	if len(got.Hours) == 0 {
+		t.Fatalf("expected hours, got none")
+	}
+}
+
+func TestGetAirQualityHourlyEmptyCode_NoData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"hours":[]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	_, err := client.GetAirQualityHourly("39.90", "116.41")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestGetAirQualityDailyEmptyCode_WithData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"days":[{"forecastStartTime":"2024-01-01T00:00:00Z","forecastEndTime":"2024-01-02T00:00:00Z","indexes":[{"code":"qaqi","name":"QAQI","aqi":50,"aqiDisplay":"50"}],"pollutants":[]} ]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	got, err := client.GetAirQualityDaily("39.90", "116.41")
+	if err != nil {
+		t.Fatalf("GetAirQualityDaily failed: %v", err)
+	}
+	if got.Code != APICodeUnknown {
+		t.Fatalf("Code = %q, want %q", got.Code, APICodeUnknown)
+	}
+	if len(got.Days) == 0 {
+		t.Fatalf("expected days, got none")
+	}
+}
+
+func TestGetAirQualityDailyEmptyCode_NoData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"days":[]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	_, err := client.GetAirQualityDaily("39.90", "116.41")
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }
