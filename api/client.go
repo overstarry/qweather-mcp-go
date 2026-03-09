@@ -368,14 +368,6 @@ func (c *Client) GetAirQualityHourly(lat, lon string) (*AirQualityHourlyResponse
 	return &response, nil
 }
 
-// Helper function to get minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Logging truncation limit
 const maxErrorLogLength = 500
 

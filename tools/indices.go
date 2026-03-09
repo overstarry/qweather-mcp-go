@@ -40,6 +40,7 @@ func handleWeatherIndices(client *api.Client, input WeatherIndicesInput) (Weathe
 	}
 
 	if locationData.Code != "200" {
+		
 		return WeatherIndicesOutput{}, fmt.Errorf("failed to query city, API returned an error")
 	}
 

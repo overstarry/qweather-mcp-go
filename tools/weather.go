@@ -65,7 +65,6 @@ func handleWeatherNow(client *api.Client, input WeatherNowInput) (WeatherNowOutp
 	if input.CityName == "" {
 		return WeatherNowOutput{}, fmt.Errorf("city name cannot be empty")
 	}
-
 	locationData, err := client.GetLocationByName(input.CityName)
 	if err != nil {
 		return WeatherNowOutput{}, fmt.Errorf("failed to query city: %w", err)
